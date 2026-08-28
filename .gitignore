@@ -1,9 +1,13 @@
-# Go
+# Go 构建产物
 /bin/
 *.exe
 *.test
 *.out
 coverage.out
+
+# Go 本地缓存
+.gocache/
+.gomodcache/
 
 # 环境变量
 .env
@@ -18,6 +22,5 @@ coverage.out
 .DS_Store
 
 # 开发期本地文件存储
-data/uploads/
 data/uploads/
 **/data/uploads/
