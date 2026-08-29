@@ -25,12 +25,14 @@ import (
 	"labnexus/internal/database"
 )
 
-// truncateTables 清理的业务表(阶段 1+2;顺序无关,无外键约束,加 CASCADE 保险)
+// truncateTables 清理的业务表(阶段 1+2+3;顺序无关,无外键约束,加 CASCADE 保险)
 var truncateTables = []string{
 	"document_tags", "reactions", "comments", "documents",
 	"folders", "spaces", "invite_codes", "tags", "users",
 	"resource_tags", "resources",
 	"task_links", "tasks", "milestones", "project_members", "projects",
+	"turnover_submissions", "turnover_items", "participants",
+	"turnover_batches", "transactions", "accounts",
 }
 
 // setupServer 构建生产装配(与 main 完全一致),清空数据,返回路由。
@@ -48,11 +50,11 @@ func setupServer(t *testing.T) *gin.Engine {
 	if err != nil {
 		t.Skipf("集成环境未就绪(先 `make up` 启动 Postgres/Redis): %v", err)
 	}
-	resetData(t, db, cfg)
-	closeDB(db)
-
+	// 先迁移建表(与生产一致),再清数据
 	r, err := app.Build(cfg)
 	require.NoError(t, err, "app.Build 失败")
+	resetData(t, db, cfg)
+	closeDB(db)
 	return r
 }
 
@@ -272,4 +274,20 @@ func assertError(t *testing.T, w *httptest.ResponseRecorder, status int, code st
 func fileExists(p string) bool {
 	info, err := os.Stat(p)
 	return err == nil && info.IsDir()
+}
+
+// newReq 构造带 body 的 HTTP 请求(用于 multipart 等非 JSON 场景)。
+func newReq(t *testing.T, method, path string, body *bytes.Buffer) *http.Request {
+	t.Helper()
+	req, err := http.NewRequest(method, path, body)
+	require.NoError(t, err)
+	return req
+}
+
+// doReq 执行请求并返回响应。
+func doReq(t *testing.T, r *gin.Engine, req *http.Request) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
 }

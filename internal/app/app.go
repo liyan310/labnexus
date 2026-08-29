@@ -15,6 +15,7 @@ import (
 	"labnexus/internal/config"
 	"labnexus/internal/database"
 	"labnexus/internal/document"
+	"labnexus/internal/finance"
 	"labnexus/internal/project"
 	"labnexus/internal/resource"
 	"labnexus/internal/space"
@@ -37,6 +38,8 @@ func Build(cfg *config.Config) (*gin.Engine, error) {
 		&tag.Tag{},
 		&resource.Resource{}, &resource.ResourceTag{},
 		&project.Project{}, &project.ProjectMember{}, &project.Milestone{}, &project.Task{}, &project.TaskLink{},
+		&finance.TurnoverBatch{}, &finance.Participant{}, &finance.TurnoverItem{},
+		&finance.TurnoverSubmission{}, &finance.Account{}, &finance.Transaction{},
 	); err != nil {
 		return nil, err
 	}
@@ -93,6 +96,12 @@ func Build(cfg *config.Config) (*gin.Engine, error) {
 		WithTxRunner(database.GormTxRunner(db))
 	projectHandler := project.NewHandler(projectSvc)
 
+	// 阶段 3:F10 经费管理(仅 admin/supervisor)
+	financeSvc := finance.NewService(finance.NewGormRepository(db), users).
+		WithTxRunner(database.GormTxRunner(db)).
+		WithPreviewStore(finance.NewCachePreviewStore(store))
+	financeHandler := finance.NewHandler(financeSvc)
+
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
@@ -118,6 +127,7 @@ func Build(cfg *config.Config) (*gin.Engine, error) {
 	tagHandler.RegisterRoutes(r, cfg.JWTSecret)
 	resHandler.RegisterRoutes(r, cfg.JWTSecret)
 	projectHandler.RegisterRoutes(r, cfg.JWTSecret)
+	financeHandler.RegisterRoutes(r, cfg.JWTSecret)
 
 	// 前端外壳(阶段 1 验证:纯 HTML/JS,由后端托管)
 	// 用 NoRoute 提供静态文件,避免 catch-all 与 /api 路由冲突;

@@ -197,6 +197,88 @@ CREATE TABLE task_links (
     PRIMARY KEY (task_id, target_type, target_id)
 );
 
+-- ============================ 阶段 3:经费管理(F10) ============================
+-- 依据:PRD-经费管理.md v2.0、specs/funds-management.md
+-- 核心模型:收入 + 支出 → 维护总金额;金额一律 BIGINT 存"分"
+
+-- 周转批次(一次"发放→回收"流程,名称即标识,如 "2026-08")
+CREATE TABLE turnover_batches (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       VARCHAR(100) NOT NULL,
+    status     VARCHAR(20) NOT NULL DEFAULT 'active', -- active / done
+    note       TEXT NOT NULL DEFAULT '',
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_turnover_batches_created ON turnover_batches(created_at DESC);
+
+-- 参与同学(姓名+学号去重,跨批次历史账单)
+CREATE TABLE participants (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       VARCHAR(50) NOT NULL,
+    student_no VARCHAR(50) NOT NULL,
+    note       TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (name, student_no)
+);
+
+-- 发放明细(每同学一条)
+CREATE TABLE turnover_items (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    batch_id       UUID NOT NULL REFERENCES turnover_batches(id) ON DELETE CASCADE,
+    participant_id UUID NOT NULL REFERENCES participants(id) ON DELETE RESTRICT,
+    date           DATE NOT NULL,               -- 发放日期
+    payroll_amount BIGINT NOT NULL DEFAULT 0,   -- 应发(分)
+    tax_amount     BIGINT NOT NULL DEFAULT 0,   -- 扣税(分,人工算好只登记)
+    tip_amount     BIGINT NOT NULL DEFAULT 0,   -- 辛苦费(分)
+    should_return  BIGINT NOT NULL DEFAULT 0,   -- 应交(分,默认=应发−扣税−辛苦费,可覆盖)
+    returned       BIGINT NOT NULL DEFAULT 0,   -- 已交(分,由上交记录累加)
+    note           TEXT NOT NULL DEFAULT '',
+    created_by     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_turnover_items_batch ON turnover_items(batch_id);
+CREATE INDEX idx_turnover_items_participant ON turnover_items(participant_id);
+
+-- 上交记录(每次上交一条;补交不限次数)
+CREATE TABLE turnover_submissions (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    item_id     UUID NOT NULL REFERENCES turnover_items(id) ON DELETE CASCADE,
+    amount      BIGINT NOT NULL,                -- 本次上交(分)
+    date        DATE NOT NULL,                  -- 上交日期
+    note        TEXT NOT NULL DEFAULT '',
+    operator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_turnover_submissions_item ON turnover_submissions(item_id);
+
+-- 资金账户(v1 单账户,预置一行)
+CREATE TABLE accounts (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       VARCHAR(100) NOT NULL,
+    account_no VARCHAR(50) NOT NULL DEFAULT '',
+    note       TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 资金流水(余额 = Σincome − Σexpense,实时计算)
+CREATE TABLE transactions (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id   UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    type         VARCHAR(10) NOT NULL,          -- income / expense
+    amount       BIGINT NOT NULL,               -- 金额(分,正数)
+    category     VARCHAR(30) NOT NULL DEFAULT 'other', -- 收入:turnover/supplement;支出:labor/other
+    related_type VARCHAR(20) NOT NULL DEFAULT 'none',  -- turnover_item / none
+    related_id   UUID,
+    note         TEXT NOT NULL DEFAULT '',
+    occurred_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    operator_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_transactions_account ON transactions(account_id, occurred_at DESC);
+
 -- ============================ 暂缓(灵感库) ============================
 -- resource_refs(文档引用资源,灵感库 F10):document_id + resource_id
 -- weekly_reports(周报,灵感库 F11)

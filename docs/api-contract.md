@@ -141,6 +141,68 @@ MVP 为数据库 LIKE;全文搜索升级见灵感库 F14。
 - `task` 结构:`{id, title, description, status, priority, due_date, milestone_id, assignee:{id,display_name}, created_at, updated_at}`
 - **状态机**(service 层校验合法迁移):`todo → in_progress → blocked → todo`(受阻后可回进行中)、`in_progress → done`;done 为终态;其余迁移返回 `VALIDATION` 错误。
 
+## 阶段 3:经费管理(F10,仅 admin/supervisor)
+
+> 权限标注:💰 = 仅 admin(经费负责人)/ supervisor(导师)可访问;student 一律 403。
+> 核心模型:**收入 + 支出 → 维护总金额**。金额一律以"分"传输/存储,展示转元。
+> 依据:PRD-经费管理.md v2.0、specs/funds-management.md。
+
+### 批次
+
+| 方法 | 路径 | 权限 | 请求体 | 响应 |
+|---|---|---|---|---|
+| POST | `/finance/batches` | 💰 | `{name, note?}` | `201 {batch}` |
+| GET | `/finance/batches` | 💰 | — | `{batches: []}`(含汇总) |
+| GET | `/finance/batches/:id` | 💰 | — | `{batch, summary, items: []}` |
+| DELETE | `/finance/batches/:id` | 💰 | — | `204`(仅 active) |
+| POST | `/finance/batches/:id/complete` | 💰 | — | `{batch}`(全部交清才可完成) |
+
+`batch`:`{id, name, status(active/done), note, created_at}`
+`summary`:`{item_count, total_payroll, total_should_return, total_returned, total_unreturned}`(分)
+
+### 明细
+
+| 方法 | 路径 | 权限 | 请求体 | 响应 |
+|---|---|---|---|---|
+| POST | `/finance/batches/:id/items` | 💰 | `{name, student_no, date, payroll_amount, tax_amount?, tip_amount, should_return?, note?}` | `201 {item}` |
+| POST | `/finance/batches/:id/items/import-preview` | 💰 | multipart:`file`(.xlsx) | `200 {preview_id, valid_rows: [], error_rows: []}` |
+| POST | `/finance/imports/:preview_id/confirm` | 💰 | — | `200 {imported_count, skipped_count}` |
+
+- `item`:`{id, batch_id, participant:{id,name,student_no}, date, payroll_amount, tax_amount, tip_amount, should_return, returned, unreturned, note, status(pending/partial/done)}`(分)
+- **应交公式**:`should_return = payroll_amount − tax_amount − tip_amount`(自动计算,可手动覆盖);
+- 导入列(表头识别,顺序无关):`姓名 / 学号 / 日期 / 应发 / 扣税 / 辛苦费 / 备注`;
+- `unreturned = should_return − returned`;`status` 由 returned 推导:0=未交,`0<returned<should_return`=部分交,`>=`=已交清。
+
+### 上交
+
+| 方法 | 路径 | 权限 | 请求体 | 响应 |
+|---|---|---|---|---|
+| POST | `/finance/items/:id/submit` | 💰 | `{amount, date, note?}` | `201 {submission}` |
+
+- `submission`:`{id, item_id, amount, date, note, operator:{id,display_name}, created_at}`(分);
+- 每次上交:item.returned 累加 + **资金池自动 +amount**(同事务);上交金额 > 未交 → 400。
+
+### 资金池
+
+| 方法 | 路径 | 权限 | 请求体 | 响应 |
+|---|---|---|---|---|
+| GET | `/finance/ledger` | 💰 | — | `{balance, transactions: []}` |
+| POST | `/finance/ledger/income` | 💰 | `{amount, date, note?}` | `201 {transaction}`(导师补充) |
+| POST | `/finance/ledger/expense` | 💰 | `{amount, date, note?}` | `201 {transaction}`(资金支出) |
+
+- `transaction`:`{id, type(income/expense), amount, category, note, occurred_at, operator:{id,display_name}, created_at}`(分);
+- `balance`(分)= Σincome − Σexpense,实时计算。
+
+### 参与同学库
+
+| 方法 | 路径 | 权限 | 请求体 | 响应 |
+|---|---|---|---|---|
+| GET | `/finance/participants` | 💰 | — | `{participants: []}`(去重+累计) |
+| GET | `/finance/participants/:id/bills` | 💰 | — | `{participant, bills: []}`(跨批次历史账单) |
+
+`participant`:`{id, name, student_no, total_items, total_should_return, total_returned}`
+`bill`:`{batch_name, date, payroll_amount, should_return, returned, note}`
+
 ## 管理端(阶段 1 起)
 
 | 方法 | 路径 | 权限 | 请求体 | 响应 |

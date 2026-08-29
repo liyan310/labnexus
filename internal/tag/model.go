@@ -105,9 +105,9 @@ func (r *GormRepository) listByIDs(ctx context.Context, table, idCol string, ids
 		return result, nil
 	}
 	type row struct {
-		ItemID  string
-		TagID   string
-		TagName string
+		ItemID   string
+		TagID    string
+		TagName  string
 		TagColor string
 	}
 	var rows []row

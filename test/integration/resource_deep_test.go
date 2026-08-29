@@ -163,9 +163,9 @@ func TestResource_ContractShape(t *testing.T) {
 
 	var res struct {
 		Resource struct {
-			ID      string `json:"id"`
-			Type    string `json:"type"`
-			Title   string `json:"title"`
+			ID       string `json:"id"`
+			Type     string `json:"type"`
+			Title    string `json:"title"`
 			Uploader struct {
 				DisplayName string `json:"display_name"`
 			} `json:"uploader"`

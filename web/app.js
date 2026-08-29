@@ -81,6 +81,9 @@ const Auth = {
     try {
       const me = await api('/me');
       document.getElementById('current-user').textContent = me.user.display_name + ' (' + me.user.role + ')';
+      // 经费模块仅 admin/supervisor 可见
+      const showFin = me.user.role === 'admin' || me.user.role === 'supervisor';
+      document.querySelectorAll('.finance-only').forEach(b => b.classList.toggle('hidden', !showFin));
     } catch (_) { /* ok */ }
     App.nav('feed');
   },
@@ -104,6 +107,7 @@ const App = {
       resources: () => Resources.render(),
       projects: () => Projects.render(),
       tags: () => Tags.render(),
+      finance: () => Finance.render(),
     }[view];
     if (fn) fn();
   },
@@ -562,6 +566,199 @@ const Projects = {
   },
 };
 
+// ===== 经费管理(仅 admin/supervisor) =====
+const Finance = {
+  current: null, // 当前批次详情
+  async render() {
+    const main = document.getElementById('main');
+    main.innerHTML = `
+      <div class="toolbar">
+        <h2>💰 经费管理</h2>
+        <button class="btn primary" onclick="Finance.newBatch()">＋ 新建批次</button>
+        <button class="btn" onclick="Finance.render()">刷新</button>
+      </div>
+      <div id="fin-ledger"></div>
+      <div id="fin-list"></div>`;
+    await Promise.all([this.loadLedger(), this.loadBatches()]);
+  },
+  async loadLedger() {
+    try {
+      const d = await api('/finance/ledger');
+      const el = document.getElementById('fin-ledger');
+      if (!el) return;
+      el.innerHTML = `<div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe)">
+        <h3>资金池余额:¥${fen2yuan(d.balance)}</h3>
+        <div class="meta"><span>收入 − 支出</span>
+        <button class="btn small" onclick="Finance.addIncome()">＋ 导师补充</button>
+        <button class="btn small" onclick="Finance.addExpense()">－ 支出</button>
+        <button class="btn small" onclick="Finance.showLedger()">流水明细</button></div>
+      </div>`;
+    } catch (e) { /* 403 等由列表统一处理 */ }
+  },
+  async loadBatches() {
+    try {
+      const d = await api('/finance/batches');
+      const list = document.getElementById('fin-list');
+      if (!list) return;
+      if (!d.batches.length) { list.innerHTML = '<div class="empty">暂无批次,新建一个吧</div>'; return; }
+      list.innerHTML = d.batches.map(b => `
+        <div class="card" style="cursor:pointer" onclick="Finance.open('${b.id}')">
+          <h3>📦 ${esc(b.name)} ${b.status === 'done' ? '<span class="tag-pill">已完成</span>' : '<span class="tag-pill">进行中</span>'}</h3>
+          <div class="meta">
+            <span>明细:${b.summary.item_count}</span>
+            <span>应交:¥${fen2yuan(b.summary.total_should_return)}</span>
+            <span>已交:¥${fen2yuan(b.summary.total_returned)}</span>
+            <span style="color:${b.summary.total_unreturned > 0 ? 'var(--danger)' : 'inherit'}">未交:¥${fen2yuan(b.summary.total_unreturned)}</span>
+          </div>
+        </div>`).join('');
+    } catch (e) {
+      const list = document.getElementById('fin-list');
+      if (list) list.innerHTML = `<div class="empty">${esc(errMsg(e))}(仅经费负责人/导师可见)</div>`;
+    }
+  },
+  async newBatch() {
+    const name = prompt('批次名称(如 2026-08)');
+    if (!name) return;
+    try { await api('/finance/batches', { method: 'POST', body: { name } }); this.render(); } catch (e) { alert(errMsg(e)); }
+  },
+  async open(batchId) {
+    try {
+      const d = await api('/finance/batches/' + batchId);
+      this.current = d.batch;
+      const b = d.batch;
+      const main = document.getElementById('main');
+      const items = (b.items || []);
+      const unreturned = items.filter(i => i.unreturned > 0);
+      main.innerHTML = `
+        <div class="toolbar"><h2>📦 ${esc(b.name)}</h2>
+          <button class="btn ghost" onclick="Finance.render()">← 返回</button>
+          <button class="btn" onclick="Finance.addItem('${b.id}')">＋ 手动加明细</button>
+          <button class="btn" onclick="Finance.importExcel('${b.id}')">📥 导入 Excel</button>
+          ${b.status === 'active' ? `<button class="btn primary" onclick="Finance.complete('${b.id}')">✅ 批次完成</button>` : ''}
+        </div>
+        <div class="card"><div class="meta">
+          <span>明细:${b.summary.item_count} 条</span>
+          <span>发放总额:¥${fen2yuan(b.summary.total_payroll)}</span>
+          <span>应交:¥${fen2yuan(b.summary.total_should_return)}</span>
+          <span>已交:¥${fen2yuan(b.summary.total_returned)}</span>
+          <span style="color:${b.summary.total_unreturned > 0 ? 'var(--danger)' : 'inherit'}">未交:¥${fen2yuan(b.summary.total_unreturned)}</span>
+        </div></div>
+        ${unreturned.length ? `<div class="card" style="border-color:var(--danger)"><h4>⏰ 未交名单(${unreturned.length})</h4>
+          ${unreturned.map(i => `<div class="meta"><span>${esc(i.participant.name)}</span><span>欠 ¥${fen2yuan(i.unreturned)}</span>${i.note ? `<span>备注:${esc(i.note)}</span>` : ''}</div>`).join('')}
+        </div>` : ''}
+        <div class="card"><h4>明细(${items.length})</h4>
+          <table class="fin-table">
+            <thead><tr><th>姓名</th><th>学号</th><th>日期</th><th>应发</th><th>扣税</th><th>辛苦费</th><th>应交</th><th>已交</th><th>未交</th><th>状态</th><th>备注</th><th></th></tr></thead>
+            <tbody>${items.map(i => `
+              <tr>
+                <td>${esc(i.participant.name)}</td>
+                <td>${esc(i.participant.student_no)}</td>
+                <td>${i.date}</td>
+                <td>${fen2yuan(i.payroll_amount)}</td>
+                <td>${fen2yuan(i.tax_amount)}</td>
+                <td>${fen2yuan(i.tip_amount)}</td>
+                <td>${fen2yuan(i.should_return)}</td>
+                <td>${fen2yuan(i.returned)}</td>
+                <td style="color:${i.unreturned > 0 ? 'var(--danger)' : 'inherit'}">${fen2yuan(i.unreturned)}</td>
+                <td>${itemStatusName(i.status)}</td>
+                <td class="meta">${esc(i.note || '')}</td>
+                <td>${i.unreturned > 0 ? `<button class="btn small" onclick="Finance.submit('${i.id}')">收款</button>` : '✓'}</td>
+              </tr>`).join('') || '<tr><td colspan="12" class="empty">暂无明细</td></tr>'}
+            </tbody>
+          </table>
+        </div>`;
+    } catch (e) { alert(errMsg(e)); }
+  },
+  async addItem(batchId) {
+    const name = prompt('姓名'); if (!name) return;
+    const student_no = prompt('学号'); if (!student_no) return;
+    const date = prompt('发放日期(YYYY-MM-DD)'); if (!date) return;
+    const payroll = prompt('应发(元)'); if (!payroll) return;
+    const tax = prompt('扣税(元,可空)') || '0';
+    const tip = prompt('辛苦费(元,可空)') || '0';
+    const note = prompt('备注(可空)') || '';
+    try {
+      await api('/finance/batches/' + batchId + '/items', { method: 'POST', body: {
+        name, student_no, date,
+        payroll_amount: yuan2fen(payroll), tax_amount: yuan2fen(tax), tip_amount: yuan2fen(tip), note,
+      } });
+      this.open(batchId);
+    } catch (e) { alert(errMsg(e)); }
+  },
+  importExcel(batchId) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx';
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const res = await fetch('/api/finance/batches/' + batchId + '/items/import-preview', {
+          method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: form, credentials: 'same-origin',
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((data && data.error && data.error.message) || ('HTTP ' + res.status));
+        const msg = `导入预览:有效 ${data.valid_count} 行,错误 ${data.error_count} 行\n\n${(data.error_rows || []).join('\n')}\n\n确认导入?`;
+        if (!confirm(msg)) return;
+        const c = await api('/finance/imports/' + data.preview_id + '/confirm?batch_id=' + batchId, { method: 'POST' });
+        alert('导入完成:' + c.imported_count + ' 条');
+        this.open(batchId);
+      } catch (e) { alert(errMsg(e)); }
+    };
+    input.click();
+  },
+  async submit(itemId) {
+    const amount = prompt('本次上交金额(元)');
+    if (!amount) return;
+    const date = prompt('上交日期(YYYY-MM-DD)') || new Date().toISOString().slice(0, 10);
+    const note = prompt('备注(可空,如补交)') || '';
+    try {
+      await api('/finance/items/' + itemId + '/submit', { method: 'POST', body: {
+        amount: yuan2fen(amount), date, note,
+      } });
+      this.open(this.current.id);
+    } catch (e) { alert(errMsg(e)); }
+  },
+  async complete(batchId) {
+    if (!confirm('标记批次完成?(需全部交清)')) return;
+    try { await api('/finance/batches/' + batchId + '/complete', { method: 'POST' }); this.open(batchId); } catch (e) { alert(errMsg(e)); }
+  },
+  async addIncome() {
+    const amount = prompt('导师补充金额(元)');
+    if (!amount) return;
+    const note = prompt('备注') || '';
+    try { await api('/finance/ledger/income', { method: 'POST', body: { amount: yuan2fen(amount), date: today(), note } }); this.render(); } catch (e) { alert(errMsg(e)); }
+  },
+  async addExpense() {
+    const amount = prompt('支出金额(元)');
+    if (!amount) return;
+    const note = prompt('用途备注') || '';
+    try { await api('/finance/ledger/expense', { method: 'POST', body: { amount: yuan2fen(amount), date: today(), note } }); this.render(); } catch (e) { alert(errMsg(e)); }
+  },
+  async showLedger() {
+    try {
+      const d = await api('/finance/ledger');
+      const main = document.getElementById('main');
+      main.innerHTML = `<div class="toolbar"><h2>💰 资金流水</h2>
+        <button class="btn ghost" onclick="Finance.render()">← 返回</button></div>
+        <div class="card"><h3>余额:¥${fen2yuan(d.balance)}</h3></div>
+        ${(d.transactions || []).map(t => `
+          <div class="card">
+            <div class="meta">
+              <span class="tag-pill" style="${t.type === 'income' ? 'background:#dcfce7' : 'background:#fee2e2'}">
+                ${t.type === 'income' ? '收入 +' : '支出 −'}${fen2yuan(t.amount)}</span>
+              <span>${t.category === 'turnover' ? '上交回笼' : t.category === 'labor' ? '劳务发放' : '其他'}</span>
+              <span>🕐 ${new Date(t.occurred_at).toLocaleString()}</span>
+              <span>经手:${esc(t.operator ? t.operator.display_name : '?')}</span>
+            </div>
+            ${t.note ? `<div class="content-preview">${esc(t.note)}</div>` : ''}
+          </div>`).join('') || '<div class="empty">暂无流水</div>'}`;
+    } catch (e) { alert(errMsg(e)); }
+  },
+};
+
 // ===== 标签 =====
 const Tags = {
   async render() {
@@ -655,6 +852,34 @@ function renderTree(nodes, depth, selected) {
 function statusName(s) {
   return { todo: '待办', in_progress: '进行中', blocked: '受阻', done: '完成', active: '进行中' }[s] || s;
 }
+function itemStatusName(s) {
+  return { pending: '未交', partial: '部分交', done: '已交清' }[s] || s;
+}
+// 金额:分 → 元字符串(如 240000 → "2400";12345 → "123.45")
+function fen2yuan(fen) {
+  if (fen == null) return '0';
+  const neg = fen < 0;
+  const abs = Math.abs(fen);
+  const yuan = Math.floor(abs / 100);
+  const rem = abs % 100;
+  return (neg ? '-' : '') + yuan + (rem ? '.' + String(rem).padStart(2, '0').replace(/0$/, '') : '');
+}
+// 金额:元字符串 → 分(如 "2400" → 240000;"123.45" → 12345)
+function yuan2fen(yuan) {
+  const s = String(yuan).trim();
+  const parts = s.split('.');
+  let y = parseInt(parts[0] || '0', 10);
+  if (isNaN(y)) y = 0;
+  let f = 0;
+  if (parts[1]) {
+    const frac = parts[1].slice(0, 2).padEnd(2, '0');
+    f = parseInt(frac, 10) || 0;
+  }
+  return y * 100 + f;
+}
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
 function transitionBtns(task) {
   const map = {
     todo: [['in_progress', '▶ 开始']],
@@ -670,5 +895,5 @@ function transitionBtns(task) {
 window.api = api; // API 封装暴露(e2e 测试与调试用)
 window.Auth = Auth; window.App = App; window.Feed = Feed; window.Space = Space;
 window.Editor = Editor; window.Resources = Resources; window.Projects = Projects;
-window.Tags = Tags; window.Search = Search;
+window.Finance = Finance; window.Tags = Tags; window.Search = Search;
 document.addEventListener('DOMContentLoaded', () => App.init());

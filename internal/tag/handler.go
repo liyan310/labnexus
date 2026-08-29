@@ -15,7 +15,7 @@ import (
 
 // 哨兵错误
 var (
-	ErrTagNotFound = errors.New("tag not found")
+	ErrTagNotFound  = errors.New("tag not found")
 	ErrTagNameEmpty = errors.New("tag name is empty")
 	ErrTagExists    = errors.New("tag already exists")
 )

@@ -60,11 +60,11 @@ type memProjectRepo struct {
 
 func newMemRepo() *memProjectRepo {
 	return &memProjectRepo{
-		projects: map[string]*project.Project{},
-		members:  map[string]*project.ProjectMember{},
+		projects:   map[string]*project.Project{},
+		members:    map[string]*project.ProjectMember{},
 		milestones: map[string]*project.Milestone{},
-		tasks:    map[string]*project.Task{},
-		links:    map[string][]*project.TaskLink{},
+		tasks:      map[string]*project.Task{},
+		links:      map[string][]*project.TaskLink{},
 	}
 }
 
@@ -221,8 +221,8 @@ func (r *memProjectRepo) ListLinks(_ context.Context, taskID string) ([]*project
 // ---- 夹具 ----
 
 type fixture struct {
-	svc  *project.Service
-	repo *memProjectRepo
+	svc   *project.Service
+	repo  *memProjectRepo
 	users *memUserRepo
 }
 
@@ -523,6 +523,5 @@ func TestDeleteTask_OwnerOnly(t *testing.T) {
 	list, _ := f.svc.ListTasks(context.Background(), owner, p.ID, project.ListFilter{})
 	assert.Empty(t, list)
 }
-
 
 func strPtr(s string) *string { return &s }

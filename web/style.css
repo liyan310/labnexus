@@ -84,3 +84,8 @@ input, textarea, select { padding: 8px 12px; border: 1px solid var(--border); bo
 .tag-check { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 .tag-check input { accent-color: var(--primary); }
 .tag-picker-empty { font-size: 12px; color: var(--muted); }
+
+/* 经费管理 */
+.fin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fin-table th, .fin-table td { border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+.fin-table th { color: var(--muted); font-weight: 600; }

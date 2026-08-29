@@ -85,7 +85,7 @@ type MemberView struct {
 // TaskView 任务视图
 type TaskView struct {
 	*Task
-	Assignee *user.User `json:"assignee,omitempty"`
+	Assignee *user.User  `json:"assignee,omitempty"`
 	Links    []*TaskLink `json:"links,omitempty"`
 }
 

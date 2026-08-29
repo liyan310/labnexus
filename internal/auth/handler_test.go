@@ -115,7 +115,7 @@ func TestHandler_Register_WeakPassword(t *testing.T) {
 
 func TestHandler_Register_UsernameTaken(t *testing.T) {
 	r, invites := newTestRouter(t)
-	registerAndLogin(t, r, invites)        // 注册 alice(消耗 INVITE-123)
+	registerAndLogin(t, r, invites)           // 注册 alice(消耗 INVITE-123)
 	seedInvite(t, invites, "INVITE-456", nil) // 新邀请码,测用户名冲突
 
 	w := doJSON(t, r, http.MethodPost, "/api/auth/register",

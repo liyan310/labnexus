@@ -51,11 +51,15 @@ func TestWorkflow_FullJourney(t *testing.T) {
 	require.Equal(t, http.StatusOK, wFeed.Code)
 	var feed struct {
 		Documents []struct {
-			Title          string `json:"title"`
-			Author         struct{ DisplayName string `json:"display_name"` } `json:"author"`
-			Tags           []struct{ Name string `json:"name"` }              `json:"tags"`
-			ReactionsCount int64  `json:"reactions_count"`
-			CommentsCount  int64  `json:"comments_count"`
+			Title  string `json:"title"`
+			Author struct {
+				DisplayName string `json:"display_name"`
+			} `json:"author"`
+			Tags []struct {
+				Name string `json:"name"`
+			} `json:"tags"`
+			ReactionsCount int64 `json:"reactions_count"`
+			CommentsCount  int64 `json:"comments_count"`
 		} `json:"documents"`
 	}
 	parseJSON(t, wFeed, &feed)

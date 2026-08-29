@@ -13,8 +13,8 @@ import (
 // ---- 内存替身 ----
 
 type memTagRepo struct {
-	byID   map[string]*tag.Tag
-	byName map[string]*tag.Tag
+	byID    map[string]*tag.Tag
+	byName  map[string]*tag.Tag
 	docTags map[string][]string // docID -> tagIDs
 }
 

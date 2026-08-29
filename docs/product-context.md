@@ -30,10 +30,11 @@
 | F7 | 资源库:文件/链接 + 标签 + 检索(论文以 PDF 文件上传) | P1 | 2 |
 | F8 | 文献元数据:DOI/arXiv 自动抓取(**已废弃,重做后再引入**) | — | — |
 | F9 | 项目/任务:看板 + 状态机 + 里程碑 | P1 | 2 |
+| F10 | 经费管理:周转批次/明细/上交/资金池(仅 admin+导师可见,PRD-经费管理.md) | P0 | 3 |
 
-### 灵感库(F10~F20,暂不实现)
+### 灵感库(F11~F21,暂不实现)
 
-F10 文档↔资源关联 / F11 周报 / F12 通知推送 / F13 微信机器人 / F14 全文搜索升级 / F15 文档任务互转 / F16 导师视图 / F17 社交增强 / F18 积分激励 / F19 知识图谱 / F20 编辑器内嵌引用块。
+F11 文档↔资源关联 / F12 周报 / F13 通知推送 / F14 微信机器人 / F15 全文搜索升级 / F16 文档任务互转 / F17 导师视图 / F18 社交增强 / F19 积分激励 / F20 知识图谱 / F21 编辑器内嵌引用块。
 每条有触发条件(见外部 PRD §4.4),**触发条件满足且经人工确认后才可捞回**。
 
 ## 3. 核心设计(理解代码的关键)
@@ -41,7 +42,7 @@ F10 文档↔资源关联 / F11 周报 / F12 通知推送 / F13 微信机器人 
 1. **统一内容模型(最重要)**:`Document` 是唯一内容实体,`visibility: private/public` 切换 —— **私有 = 笔记,公开 = 帖子**,评论/点赞挂在 Document 上。这是与 Notion+论坛式分离设计最大的区别,也是"文献↔笔记↔帖子↔任务"关联能成立的基础。
 2. **权限单点**:所有权限判断收敛到 `can(user, action, target)` 函数;role 三枚举为 supervisor 差异化权限预留(P2 在函数内加分支)。
 3. **模块化单体 + MVC 轻量分层**:`internal/<domain>/{handler,service,repository}`,依赖方向 handler→service→repository;跨模块调用仅限 service 层;构造函数注入,无全局状态。
-4. **数据模型**:权威定义 `docs/schema.sql`(阶段 1/2 表已齐全;`resource_refs`/`weekly_reports` 暂缓)。
+4. **数据模型**:权威定义 `docs/schema.sql`(阶段 1/2/3 表已齐全;`resource_refs`/`weekly_reports` 暂缓)。
 5. **任务状态机**:`todo → in_progress → blocked → todo`、`in_progress → done`;流转校验在 service 层(`TaskService.Transition`)。
 
 ## 4. 已定决策清单(勿推翻;推翻需先改外部 PRD §9)

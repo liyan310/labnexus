@@ -25,6 +25,7 @@
 | **F6 搜索** | **跨类型聚合**:文档 + 资源 + 任务同词搜索,type 定向 | 标题优先排序 |
 | **F7 资源库** | link/file 两种资源、文件上传(扩展名+MIME 双校验,普通 50MB/视频 100MB)、下载/预览(PDF/图片/文本/视频)、标签/描述/类型/关键词筛选 | 本地磁盘存储;论文以 PDF 上传 |
 | **F9 项目任务** | 项目 + 成员管理 + 里程碑 + 任务看板 + **状态机**(todo→in_progress→blocked|done) | 四级权限隔离 |
+| **F10 经费管理** | 周转批次、明细(**手动录入 / Excel 导入**)、上交/补交(自动进资金池)、批次汇总/完成、单账户资金池、参与同学历史账单 | 仅 admin+导师可见;收入+支出=总金额 |
 | **前端外壳** | 纯 HTML/JS 单页应用,对接全部 API,浏览器直接使用 | 零构建 |
 
 **灵感库**(已记录,暂不开发,按触发条件评估):通知推送、微信机器人、全文搜索升级、导师视图、积分激励等,见 `docs/product-context.md` §2。
@@ -91,6 +92,7 @@ docker exec labnexus-postgres psql -U labnexus -d labnexus -c \
 | **我的空间** | 目录树管理;按目录查看文档;编辑/删除/发布撤回 |
 | **资源库** | 建链接(仅 http/https)、上传文件(支持预览/下载);按类型/关键词筛选 |
 | **项目** | 建项目 → 加成员 → 建里程碑 → 建任务;看板按状态分列,点按钮流转 |
+| **经费**(仅 admin/导师) | 建批次 → 手动/导入明细 → 收款(上交/补交)→ 资金池余额与流水 |
 | **标签** | 创建标签、查看标签内容页 |
 | **顶栏搜索** | 跨文档/资源/任务三类搜索 |
 
@@ -103,10 +105,10 @@ docker exec labnexus-postgres psql -U labnexus -d labnexus -c \
 | 层 | 命令 | 说明 |
 |---|---|---|
 | 单元 + handler | `make check` | service 业务逻辑(内存替身)+ HTTP 层,make check 含 vet/fmt/test/lint/build |
-| 集成(端到端) | `make test-integration` | **真实 Postgres+Redis 容器**,35 个用例:认证安全/业务流/数据隔离/越权矩阵/边界/契约/资源/项目/搜索/前端外壳 |
+| 集成(端到端) | `make test-integration` | **真实 Postgres+Redis 容器**,含认证/业务流/越权/边界/契约/资源/项目/经费/搜索/前端外壳 |
 | 前端 E2E | `node scripts/e2e-frontend.mjs` | mock DOM + 真实 API 全流程(注册→发帖→点赞→评论→空间→资源→项目→标签→搜索) |
 | 前端诊断 | `node scripts/diag-frontend.mjs` | node mock 环境定位前端运行时错误 |
-| 冒烟脚本 | `./scripts/smoke-*.sh` ×5 | auth/space/doc/resource/project 每功能手动冒烟 |
+| 冒烟脚本 | `./scripts/smoke-*.sh` ×6 | auth/space/doc/resource/project/finance 每功能手动冒烟 |
 | **人工验收** | [`docs/manual-acceptance.md`](docs/manual-acceptance.md) | 给导师/组员用的逐步操作清单 |
 
 ---
@@ -171,17 +173,18 @@ labnexus/
 │   ├── document/ tag/     # F3/F4/F5/F6 文档/信息流/标签/搜索
 │   ├── resource/          # F7 资源库(link/file,下载/预览)
 │   ├── project/           # F9 项目/任务
+│   ├── finance/           # F10 经费管理(批次/明细/上交/资金池)
 │   ├── cache/ token/ middleware/ database/ config/   # 基础设施
 ├── web/                   # 前端外壳(纯 HTML/JS,后端托管)
-├── test/integration/      # 集成测试(build tag: integration,35 用例)
+├── test/integration/      # 集成测试(build tag: integration)
 ├── docs/
 │   ├── standards.md       # 开发规范(SDD+TDD)
 │   ├── api-contract.md    # API 契约(全部端点)
 │   ├── schema.sql         # 数据模型权威定义
-│   ├── specs/             # 功能规格 ×12(含前端)
+│   ├── specs/             # 功能规格(含经费管理/前端)
 │   ├── manual-acceptance.md  # 人工验收指南
 │   └── product-context.md # 产品上下文(自包含)
-├── scripts/               # check.sh + 冒烟 ×5 + 前端 diag/e2e
+├── scripts/               # check.sh + 冒烟 ×6 + 前端 diag/e2e
 ├── Makefile               # up/down/run/build/test/test-integration/lint/check
 ├── AGENTS.md              # AI 接手指南(自动读取)
 └── docker-compose.yml     # Postgres(5433)+ Redis(6380)
@@ -196,7 +199,8 @@ labnexus/
 | 阶段 0 | PRD 定稿 + 数据模型 + API 契约 + 骨架 + 规范 | ✅ |
 | 阶段 1 | MVP 社区:F1~F6 + 深度接口测试 + 前端外壳 | ✅ |
 | 阶段 2 | 资源库/项目任务:F7~F9 + 深度接口测试(2026-08-25:F7 重写为 link/file,去掉 paper/DOI/arXiv) | ✅ |
-| 阶段 3 | 迭代:灵感库功能按触发条件捞回(通知推送/导师视图等)+ 导师参与 | ⏳ 待启动 |
+| 阶段 3 | 经费管理:F10(批次/Excel 导入/上交/资金池,2026-08-29) | ✅ |
+| 阶段 4 | 迭代:灵感库功能按触发条件捞回(通知推送/导师视图等)+ 导师参与 | ⏳ 待启动 |
 
 ---
 
