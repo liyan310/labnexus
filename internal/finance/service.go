@@ -622,7 +622,7 @@ func (s *Service) ParticipantBills(ctx context.Context, userID, participantID st
 			return nil, nil, err
 		}
 		bills = append(bills, &BillView{
-			BatchName: b.Name, Date: deref(it.Date), PayrollAmount: it.PayrollAmount,
+			BatchName: b.Name, Date: it.Date.String(), PayrollAmount: it.PayrollAmount,
 			ShouldReturn: it.ShouldReturn, Returned: it.Returned,
 			Unreturned: it.Unreturned(), Note: it.Note,
 		})
@@ -842,12 +842,4 @@ func parseFen(s string) (int64, error) {
 
 func newID() string {
 	return uuid.NewString()
-}
-
-// deref 指针解引用,空指针返回空串。
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

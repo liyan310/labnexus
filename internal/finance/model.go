@@ -5,7 +5,9 @@ package finance
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +15,69 @@ import (
 
 	"labnexus/internal/database"
 )
+
+// Date 自定义日期类型:JSON 序列化为 YYYY-MM-DD,GORM 存 date 列。
+type Date time.Time
+
+// Scan 实现 sql.Scanner(date 列 → Date)。
+func (d *Date) Scan(value any) error {
+	switch v := value.(type) {
+	case time.Time:
+		*d = Date(v)
+	case string:
+		t, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			return err
+		}
+		*d = Date(t)
+	case nil:
+		*d = Date{}
+	default:
+		return fmt.Errorf("unsupported date scan type %T", value)
+	}
+	return nil
+}
+
+// Value 实现 driver.Valuer(Date → date 列)。
+func (d Date) Value() (driver.Value, error) {
+	return time.Time(d), nil
+}
+
+// MarshalJSON 输出 "YYYY-MM-DD"(而非 RFC3339)。
+func (d Date) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + time.Time(d).Format("2006-01-02") + `"`), nil
+}
+
+// UnmarshalJSON 解析 "YYYY-MM-DD" 或 RFC3339。
+func (d *Date) UnmarshalJSON(b []byte) error {
+	s := string(b)
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, s)
+	}
+	if err != nil {
+		return err
+	}
+	*d = Date(t)
+	return nil
+}
+
+// String 返回 YYYY-MM-DD。
+func (d Date) String() string {
+	return time.Time(d).Format("2006-01-02")
+}
+
+// parseDate 解析 YYYY-MM-DD 字符串为 Date。
+func parseDate(s string) Date {
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return Date{}
+	}
+	return Date(t)
+}
 
 // ErrNotFound 记录不存在
 var ErrNotFound = errors.New("finance: not found")
@@ -82,7 +147,7 @@ type TurnoverItem struct {
 	ID            string    `gorm:"type:uuid;primaryKey" json:"id"`
 	BatchID       string    `gorm:"type:uuid;index" json:"batch_id"`
 	ParticipantID string    `gorm:"type:uuid;index" json:"participant_id"`
-	Date          *string   `gorm:"type:date" json:"date"`
+	Date          Date      `gorm:"type:date" json:"date"`
 	PayrollAmount int64     `json:"payroll_amount"` // 应发(分)
 	TaxAmount     int64     `json:"tax_amount"`     // 扣税(分)
 	TipAmount     int64     `json:"tip_amount"`     // 辛苦费(分)
@@ -102,7 +167,7 @@ func NewItem(batchID, participantID, date string, payroll, tax, tip, shouldRetur
 	now := time.Now()
 	return &TurnoverItem{
 		ID: uuid.NewString(), BatchID: batchID, ParticipantID: participantID,
-		Date: &date, PayrollAmount: payroll, TaxAmount: tax, TipAmount: tip,
+		Date: parseDate(date), PayrollAmount: payroll, TaxAmount: tax, TipAmount: tip,
 		ShouldReturn: shouldReturn, Note: note, CreatedBy: createdBy,
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -133,7 +198,7 @@ type TurnoverSubmission struct {
 	ID         string    `gorm:"type:uuid;primaryKey" json:"id"`
 	ItemID     string    `gorm:"type:uuid;index" json:"item_id"`
 	Amount     int64     `json:"amount"`
-	Date       *string   `gorm:"type:date" json:"date"`
+	Date       Date      `gorm:"type:date" json:"date"`
 	Note       string    `gorm:"type:text" json:"note"`
 	OperatorID string    `gorm:"type:uuid" json:"operator_id"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -143,7 +208,7 @@ type TurnoverSubmission struct {
 func NewSubmission(itemID string, amount int64, date, note, operatorID string) *TurnoverSubmission {
 	return &TurnoverSubmission{
 		ID: uuid.NewString(), ItemID: itemID, Amount: amount,
-		Date: &date, Note: note, OperatorID: operatorID, CreatedAt: time.Now(),
+		Date: parseDate(date), Note: note, OperatorID: operatorID, CreatedAt: time.Now(),
 	}
 }
 

@@ -172,7 +172,7 @@ MVP 为数据库 LIKE;全文搜索升级见灵感库 F14。
 - `item`:`{id, batch_id, participant:{id,name,student_no}, date, payroll_amount, tax_amount, tip_amount, should_return, returned, unreturned, note, status(pending/partial/done)}`(分)
 - **应交公式**:`should_return = payroll_amount − tip_amount`(**扣税不减**,只记录;自动计算,可手动覆盖);
 - 导入列(表头识别,顺序无关):`姓名 / 学号 / 日期 / 应发 / 扣税 / 辛苦费 / 备注`;
-- **日期格式**:兼容 `2026-08-22` 与 `2026/8/22`(导入时自动归一化为 `YYYY-MM-DD` 存储);**API 返回可能为 `2026-08-22T00:00:00Z`(GORM date 列行为),前端取前 10 位展示**;
+- **日期格式**:兼容 `2026-08-22` 与 `2026/8/22`(导入时自动归一化),**API 统一返回 `YYYY-MM-DD` 纯日期**;
 - `unreturned = should_return − returned`;`status` 由 returned 推导:0=未交,`0<returned<should_return`=部分交,`>=`=已交清。
 
 ### 上交

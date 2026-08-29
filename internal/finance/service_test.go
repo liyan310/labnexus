@@ -377,7 +377,7 @@ func TestFinance_ItemFormulaAndParticipantReuse(t *testing.T) {
 	})
 	assert.Equal(t, int64(240000), itemTax.ShouldReturn, "应交 = 应发−辛苦费,扣税不减")
 	assert.Equal(t, int64(5000), itemTax.TaxAmount, "扣税仅记录")
-	assert.Equal(t, "2026-08-22", *itemTax.Date, "日期应归一化为 YYYY-MM-DD")
+	assert.Equal(t, "2026-08-22", itemTax.Date.String(), "日期应归一化为 YYYY-MM-DD")
 
 	// 手动覆盖应交
 	item2 := f.addItem(t, batchID, finance.CreateItemRequest{
