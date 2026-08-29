@@ -2,7 +2,7 @@
 # 规范依据:docs/standards.md §8
 # 使用:make <target>;提交前必跑 make check
 
-.PHONY: up down run build test lint check tidy
+.PHONY: up down run build test lint check tidy seed-admin
 
 ## 容器
 up:
@@ -29,6 +29,10 @@ tidy:
 ## 质量
 test:
 	go test ./... -cover
+
+# 种子:创建固定测试管理员 test_admin / Test@123456(清库后可随时恢复)
+seed-admin:
+	bash scripts/seed-test-admin.sh
 
 # 集成测试(真实 Postgres+Redis,需先 make up;环境未就绪自动跳过)
 test-integration:

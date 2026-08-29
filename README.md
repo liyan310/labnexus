@@ -109,6 +109,7 @@ docker exec labnexus-postgres psql -U labnexus -d labnexus -c \
 | 前端 E2E | `node scripts/e2e-frontend.mjs` | mock DOM + 真实 API 全流程(注册→发帖→点赞→评论→空间→资源→项目→标签→搜索) |
 | 前端诊断 | `node scripts/diag-frontend.mjs` | node mock 环境定位前端运行时错误 |
 | 冒烟脚本 | `./scripts/smoke-*.sh` ×6 | auth/space/doc/resource/project/finance 每功能手动冒烟 |
+| 测试管理员 | `make seed-admin` | **固定账号 test_admin / Test@123456**(admin)。集成测试/清库会清空 users,跑一次即恢复 |
 | **人工验收** | [`docs/manual-acceptance.md`](docs/manual-acceptance.md) | 给导师/组员用的逐步操作清单 |
 
 ---
