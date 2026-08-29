@@ -82,7 +82,7 @@ type TurnoverItem struct {
 	ID            string    `gorm:"type:uuid;primaryKey" json:"id"`
 	BatchID       string    `gorm:"type:uuid;index" json:"batch_id"`
 	ParticipantID string    `gorm:"type:uuid;index" json:"participant_id"`
-	Date          string    `gorm:"type:date" json:"date"`
+	Date          *string   `gorm:"type:date" json:"date"`
 	PayrollAmount int64     `json:"payroll_amount"` // 应发(分)
 	TaxAmount     int64     `json:"tax_amount"`     // 扣税(分)
 	TipAmount     int64     `json:"tip_amount"`     // 辛苦费(分)
@@ -94,15 +94,15 @@ type TurnoverItem struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-// NewItem 构造明细(应交默认 = 应发−扣税−辛苦费,可覆盖)。
+// NewItem 构造明细(应交默认 = 应发−辛苦费,扣税不减仅记录;可覆盖)。
 func NewItem(batchID, participantID, date string, payroll, tax, tip, shouldReturn int64, note, createdBy string) *TurnoverItem {
 	if shouldReturn <= 0 {
-		shouldReturn = payroll - tax - tip
+		shouldReturn = payroll - tip
 	}
 	now := time.Now()
 	return &TurnoverItem{
 		ID: uuid.NewString(), BatchID: batchID, ParticipantID: participantID,
-		Date: date, PayrollAmount: payroll, TaxAmount: tax, TipAmount: tip,
+		Date: &date, PayrollAmount: payroll, TaxAmount: tax, TipAmount: tip,
 		ShouldReturn: shouldReturn, Note: note, CreatedBy: createdBy,
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -133,7 +133,7 @@ type TurnoverSubmission struct {
 	ID         string    `gorm:"type:uuid;primaryKey" json:"id"`
 	ItemID     string    `gorm:"type:uuid;index" json:"item_id"`
 	Amount     int64     `json:"amount"`
-	Date       string    `gorm:"type:date" json:"date"`
+	Date       *string   `gorm:"type:date" json:"date"`
 	Note       string    `gorm:"type:text" json:"note"`
 	OperatorID string    `gorm:"type:uuid" json:"operator_id"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -143,7 +143,7 @@ type TurnoverSubmission struct {
 func NewSubmission(itemID string, amount int64, date, note, operatorID string) *TurnoverSubmission {
 	return &TurnoverSubmission{
 		ID: uuid.NewString(), ItemID: itemID, Amount: amount,
-		Date: date, Note: note, OperatorID: operatorID, CreatedAt: time.Now(),
+		Date: &date, Note: note, OperatorID: operatorID, CreatedAt: time.Now(),
 	}
 }
 

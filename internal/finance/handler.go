@@ -31,6 +31,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine, secret string) {
 	authed.DELETE("/finance/batches/:id", h.DeleteBatch)
 	authed.POST("/finance/batches/:id/complete", h.CompleteBatch)
 	authed.POST("/finance/batches/:id/items", h.CreateItem)
+	authed.GET("/finance/import-template", h.ImportTemplate)
 	authed.POST("/finance/batches/:id/items/import-preview", h.ImportPreview)
 	authed.POST("/finance/imports/:preview_id/confirm", h.ConfirmImport)
 	authed.POST("/finance/items/:id/submit", h.Submit)
@@ -110,6 +111,18 @@ func (h *Handler) CreateItem(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"item": view})
+}
+
+// ImportTemplate 下载导入模板 xlsx。
+func (h *Handler) ImportTemplate(c *gin.Context) {
+	data, err := h.svc.ImportTemplate(c.Request.Context(), h.userID(c))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", `attachment; filename="finance-import-template.xlsx"`)
+	_, _ = c.Writer.Write(data)
 }
 
 func (h *Handler) ImportPreview(c *gin.Context) {

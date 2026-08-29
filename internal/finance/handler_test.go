@@ -130,6 +130,23 @@ func TestFinance_BatchAndItemFlow(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w5.Code)
 }
 
+func TestFinance_ImportTemplateEndpoint(t *testing.T) {
+	r, f := newTestRouter(t)
+	f.seedRoles()
+	adminTok := roleHeader(adminID, user.RoleAdmin)
+
+	w := finDo(t, r, http.MethodGet, "/api/finance/import-template", "", adminTok)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		w.Header().Get("Content-Type"))
+	assert.Contains(t, w.Header().Get("Content-Disposition"), "attachment")
+	assert.NotEmpty(t, w.Body.Bytes(), "模板内容非空")
+
+	// student → 403
+	w2 := finDo(t, r, http.MethodGet, "/api/finance/import-template", "", roleHeader(studentID, user.RoleStudent))
+	assert.Equal(t, http.StatusForbidden, w2.Code)
+}
+
 func TestFinance_ImportEndpoint(t *testing.T) {
 	r, f := newTestRouter(t)
 	f.seedRoles()

@@ -634,6 +634,7 @@ const Finance = {
           <button class="btn ghost" onclick="Finance.render()">← 返回</button>
           <button class="btn" onclick="Finance.addItem('${b.id}')">＋ 手动加明细</button>
           <button class="btn" onclick="Finance.importExcel('${b.id}')">📥 导入 Excel</button>
+          <button class="btn" onclick="Finance.downloadTemplate()">📄 下载模板</button>
           ${b.status === 'active' ? `<button class="btn primary" onclick="Finance.complete('${b.id}')">✅ 批次完成</button>` : ''}
         </div>
         <div class="card"><div class="meta">
@@ -653,7 +654,7 @@ const Finance = {
               <tr>
                 <td>${esc(i.participant.name)}</td>
                 <td>${esc(i.participant.student_no)}</td>
-                <td>${i.date}</td>
+                <td>${fmtDate(i.date)}</td>
                 <td>${fen2yuan(i.payroll_amount)}</td>
                 <td>${fen2yuan(i.tax_amount)}</td>
                 <td>${fen2yuan(i.tip_amount)}</td>
@@ -683,6 +684,20 @@ const Finance = {
         payroll_amount: yuan2fen(payroll), tax_amount: yuan2fen(tax), tip_amount: yuan2fen(tip), note,
       } });
       this.open(batchId);
+    } catch (e) { alert(errMsg(e)); }
+  },
+  async downloadTemplate() {
+    try {
+      const res = await fetch('/api/finance/import-template', {
+        headers: { 'Authorization': 'Bearer ' + token }, credentials: 'same-origin',
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'finance-import-template.xlsx';
+      a.click();
+      URL.revokeObjectURL(a.href);
     } catch (e) { alert(errMsg(e)); }
   },
   importExcel(batchId) {
@@ -879,6 +894,11 @@ function yuan2fen(yuan) {
 }
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+// fmtDate 日期展示:兼容 "2026-08-22" 与 "2026-08-22T00:00:00Z",统一取前 10 位。
+function fmtDate(d) {
+  if (!d) return '';
+  return String(d).slice(0, 10);
 }
 function transitionBtns(task) {
   const map = {

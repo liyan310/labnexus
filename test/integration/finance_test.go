@@ -104,7 +104,7 @@ func TestFinance_ImportFlow(t *testing.T) {
 	_ = f.SetCellValue("Sheet1", "F1", "辛苦费")
 	_ = f.SetCellValue("Sheet1", "A2", "张同学")
 	_ = f.SetCellValue("Sheet1", "B2", "2023001")
-	_ = f.SetCellValue("Sheet1", "C2", "2026-09-10")
+	_ = f.SetCellValue("Sheet1", "C2", "2026/9/10") // 斜杠日期,应归一化
 	_ = f.SetCellValue("Sheet1", "D2", "2500")
 	_ = f.SetCellValue("Sheet1", "E2", "0")
 	_ = f.SetCellValue("Sheet1", "F2", "100")

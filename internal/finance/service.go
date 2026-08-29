@@ -4,6 +4,7 @@
 package finance
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -304,6 +305,12 @@ func (s *Service) CreateItem(ctx context.Context, userID, batchID string, req Cr
 	if err := validateItemRequest(req); err != nil {
 		return nil, err
 	}
+	// 归一化日期(兼容 2026/8/22 → 2026-08-22)
+	normDate, err := normalizeDate(req.Date)
+	if err != nil {
+		return nil, ErrInvalidDate
+	}
+	req.Date = normDate
 
 	var item *TurnoverItem
 	err = s.txRunner(ctx, func(tctx context.Context) error {
@@ -379,7 +386,14 @@ func (s *Service) ImportPreview(ctx context.Context, userID, batchID string, fil
 		case !validDate(r.Date):
 			errs = append(errs, line+":日期格式错误")
 		default:
-			valid = append(valid, r)
+			// 归一化日期(2026/8/22 → 2026-08-22)
+			normDate, err := normalizeDate(r.Date)
+			if err != nil {
+				errs = append(errs, line+":日期格式错误")
+			} else {
+				r.Date = normDate
+				valid = append(valid, r)
+			}
 		}
 	}
 
@@ -446,6 +460,11 @@ func (s *Service) Submit(ctx context.Context, userID, itemID string, req SubmitR
 	if req.Date == "" || !validDate(req.Date) {
 		return nil, ErrInvalidDate
 	}
+	normDate, err := normalizeDate(req.Date)
+	if err != nil {
+		return nil, ErrInvalidDate
+	}
+	req.Date = normDate
 	item, err := s.repo.GetItem(ctx, itemID)
 	if err != nil {
 		return nil, ErrItemNotFound
@@ -532,13 +551,17 @@ func (s *Service) addLedgerTx(ctx context.Context, userID, typ, category string,
 	if req.Date == "" || !validDate(req.Date) {
 		return nil, ErrInvalidDate
 	}
+	normDate, err := normalizeDate(req.Date)
+	if err != nil {
+		return nil, ErrInvalidDate
+	}
 	var tx *Transaction
-	err := s.txRunner(ctx, func(tctx context.Context) error {
+	err = s.txRunner(ctx, func(tctx context.Context) error {
 		acc, err := s.repo.EnsureDefaultAccount(tctx)
 		if err != nil {
 			return err
 		}
-		occurred, err := time.Parse("2006-01-02", req.Date)
+		occurred, err := time.Parse("2006-01-02", normDate)
 		if err != nil {
 			return ErrInvalidDate
 		}
@@ -599,12 +622,43 @@ func (s *Service) ParticipantBills(ctx context.Context, userID, participantID st
 			return nil, nil, err
 		}
 		bills = append(bills, &BillView{
-			BatchName: b.Name, Date: it.Date, PayrollAmount: it.PayrollAmount,
+			BatchName: b.Name, Date: deref(it.Date), PayrollAmount: it.PayrollAmount,
 			ShouldReturn: it.ShouldReturn, Returned: it.Returned,
 			Unreturned: it.Unreturned(), Note: it.Note,
 		})
 	}
 	return p, bills, nil
+}
+
+// ---- 模板 ----
+
+// ImportTemplate 生成导入模板 xlsx(表头 + 示例行)。
+func (s *Service) ImportTemplate(ctx context.Context, userID string) ([]byte, error) {
+	if err := s.requireFinance(ctx, userID); err != nil {
+		return nil, err
+	}
+	f := excelize.NewFile()
+	sheet := "Sheet1"
+	headers := []string{"姓名", "学号", "日期", "应发", "扣税", "辛苦费", "备注"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		if err := f.SetCellValue(sheet, cell, h); err != nil {
+			return nil, err
+		}
+	}
+	// 示例行(日期用 2026/8/22 展示兼容格式)
+	sample := []string{"张三", "20230001", "2026/8/22", "2500", "0", "100", "示例行,导入前请删除"}
+	for i, v := range sample {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
+		if err := f.SetCellValue(sheet, cell, v); err != nil {
+			return nil, err
+		}
+	}
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // ---- 内部 helper ----
@@ -729,8 +783,21 @@ func validateItemRequest(req CreateItemRequest) error {
 	return nil
 }
 
+// normalizeDate 归一化日期:兼容 "2026-08-22" 与 "2026/8/22",统一返回 "2026-08-22"。
+func normalizeDate(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	// 替换分隔符为 "-"(兼容 "/" 与 "-",月份/日期可无前导零)
+	clean := strings.ReplaceAll(s, "/", "-")
+	t, err := time.Parse("2006-1-2", clean)
+	if err != nil {
+		return "", err
+	}
+	return t.Format("2006-01-02"), nil
+}
+
+// validDate 校验日期格式(兼容 "/" 与 "-")。
 func validDate(s string) bool {
-	_, err := time.Parse("2006-01-02", s)
+	_, err := normalizeDate(s)
 	return err == nil
 }
 
@@ -775,4 +842,12 @@ func parseFen(s string) (int64, error) {
 
 func newID() string {
 	return uuid.NewString()
+}
+
+// deref 指针解引用,空指针返回空串。
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

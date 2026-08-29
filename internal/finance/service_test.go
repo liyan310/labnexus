@@ -361,7 +361,7 @@ func TestFinance_ItemFormulaAndParticipantReuse(t *testing.T) {
 	f.seedRoles()
 	batchID := f.newBatch(t, "2026-08")
 
-	// 应交自动 = 应发−扣税−辛苦费
+	// 应交自动 = 应发−辛苦费(扣税不减,仅记录)
 	item := f.addItem(t, batchID, finance.CreateItemRequest{
 		Name: "张同学", StudentNo: "2023001", Date: "2026-08-20",
 		PayrollAmount: 250000, TaxAmount: 0, TipAmount: 10000,
@@ -369,6 +369,15 @@ func TestFinance_ItemFormulaAndParticipantReuse(t *testing.T) {
 	assert.Equal(t, int64(240000), item.ShouldReturn)
 	assert.Equal(t, int64(240000), item.Unreturned)
 	assert.Equal(t, finance.ItemStatusPending, item.Status)
+
+	// 扣税不为 0 也不减:应发 2500 − 辛苦费 100 = 2400(扣税 50 只记录)
+	itemTax := f.addItem(t, batchID, finance.CreateItemRequest{
+		Name: "赵同学", StudentNo: "2023005", Date: "2026/8/22",
+		PayrollAmount: 250000, TaxAmount: 5000, TipAmount: 10000,
+	})
+	assert.Equal(t, int64(240000), itemTax.ShouldReturn, "应交 = 应发−辛苦费,扣税不减")
+	assert.Equal(t, int64(5000), itemTax.TaxAmount, "扣税仅记录")
+	assert.Equal(t, "2026-08-22", *itemTax.Date, "日期应归一化为 YYYY-MM-DD")
 
 	// 手动覆盖应交
 	item2 := f.addItem(t, batchID, finance.CreateItemRequest{
@@ -551,6 +560,36 @@ func TestFinance_ImportPreviewAndConfirm(t *testing.T) {
 	// 非法 Excel → 400
 	_, _, _, err = f.svc.ImportPreview(context.Background(), adminID, batchID, strings.NewReader("not an xlsx"))
 	assert.ErrorIs(t, err, finance.ErrInvalidExcel)
+}
+
+// ---- 模板下载 ----
+
+func TestFinance_ImportTemplate(t *testing.T) {
+	f := newFixture(t)
+	f.seedRoles()
+
+	data, err := f.svc.ImportTemplate(context.Background(), adminID)
+	require.NoError(t, err)
+	require.NotEmpty(t, data)
+
+	// 解析回读:首行表头应包含全部列
+	xf, err := excelize.OpenReader(bytes.NewReader(data))
+	require.NoError(t, err)
+	defer xf.Close()
+	rows, err := xf.GetRows("Sheet1")
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "表头 + 示例行")
+	headers := rows[0]
+	expected := []string{"姓名", "学号", "日期", "应发", "扣税", "辛苦费", "备注"}
+	for i, h := range expected {
+		assert.Equal(t, h, headers[i], "表头 %d", i)
+	}
+	// 示例行日期用斜杠格式,验证可被导入解析
+	assert.Equal(t, "2026/8/22", rows[1][2])
+
+	// student 不可下载 → 403
+	_, err = f.svc.ImportTemplate(context.Background(), studentID)
+	assert.ErrorIs(t, err, finance.ErrForbidden)
 }
 
 // ---- 批次完成 ----
